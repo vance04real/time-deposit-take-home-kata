@@ -6,6 +6,5 @@ import java.util.List;
 
 public interface WithdrawalRepository {
     List<Withdrawal> findByTimeDepositId(Integer timeDepositId);
-
     List<Withdrawal> findByTimeDepositIdIn(List<Integer> timeDepositIds);
 }
