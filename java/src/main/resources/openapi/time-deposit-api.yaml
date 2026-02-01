@@ -1,0 +1,275 @@
+openapi: 3.0.3
+info:
+  title: XA Bank Time Deposit API
+  description: |
+    RESTful API for managing time deposits including balance updates and retrieval.
+
+    ## Key Implementation Assumptions:
+    - Interest is calculated on-demand when update endpoint is called
+    - Interest can be applied multiple times (cumulative)
+    - Interest calculation uses simple monthly rate: balance * annual_rate / 12
+    - Withdrawals don't affect interest eligibility
+    - All monetary values use 2 decimal places
+    - No authentication/authorization implemented (assumption for kata)
+  version: 1.0.0
+  contact:
+    name: XA Bank Development Team
+    email: dev@xabank.com
+
+servers:
+  - url: http://localhost:8080/api
+    description: Local development server
+  - url: https://api.xabank.com/api
+    description: Production server
+
+paths:
+  /time-deposits/update-balances:
+    post:
+      tags:
+        - Time Deposits
+      summary: Update balances for all time deposits
+      description: |
+        Calculates and applies monthly interest to all time deposits based on their plan type:
+        - Basic Plan: 1% annual interest (applied after 30 days)
+        - Student Plan: 3% annual interest (applied between 30-365 days)
+        - Premium Plan: 5% annual interest (applied after 45 days)
+
+        ASSUMPTIONS:
+        - Interest is calculated as: balance * annual_rate / 12
+        - Can be called multiple times (interest is cumulative)
+        - All deposits are updated in a single transaction
+        - No tracking of previous interest applications
+      operationId: updateTimeDepositBalances
+      responses:
+        '200':
+          description: Balances updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateBalancesResponse'
+              example:
+                message: "Successfully updated balances for 150 time deposits"
+                updatedCount: 150
+                timestamp: "2024-01-31T10:30:00Z"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /time-deposits:
+    get:
+      tags:
+        - Time Deposits
+      summary: Retrieve all time deposits
+      description: Returns a list of all time deposits with their current details and associated withdrawals
+      operationId: getAllTimeDeposits
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination (0-based)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Page size for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: Sort field and direction (e.g., "balance,desc")
+          required: false
+          schema:
+            type: string
+            default: "id,asc"
+      responses:
+        '200':
+          description: List of time deposits retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeDepositsResponse'
+              example:
+                content:
+                  - id: 1
+                    planType: "basic"
+                    balance: 10347.56
+                    days: 45
+                    withdrawals:
+                      - id: 101
+                        amount: 500.00
+                        date: "2024-01-15"
+                  - id: 2
+                    planType: "student"
+                    balance: 5234.89
+                    days: 180
+                    withdrawals:
+                      - id: 102
+                        amount: 200.00
+                        date: "2024-01-10"
+                      - id: 103
+                        amount: 300.00
+                        date: "2024-01-20"
+                  - id: 3
+                    planType: "premium"
+                    balance: 50789.45
+                    days: 60
+                    withdrawals: [ ]
+                totalElements: 150
+                totalPages: 8
+                pageNumber: 0
+                pageSize: 20
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    TimeDeposit:
+      type: object
+      required:
+        - id
+        - planType
+        - balance
+        - days
+        - withdrawals
+      properties:
+        id:
+          type: integer
+          description: Unique identifier of the time deposit
+          example: 1
+        planType:
+          type: string
+          description: Type of deposit plan
+          enum:
+            - basic
+            - student
+            - premium
+          example: "basic"
+        balance:
+          type: number
+          format: double
+          description: Current balance of the time deposit
+          minimum: 0
+          example: 10347.56
+        days:
+          type: integer
+          description: Number of days since deposit creation
+          minimum: 0
+          example: 45
+        withdrawals:
+          type: array
+          description: List of withdrawals made from this time deposit
+          items:
+            $ref: '#/components/schemas/Withdrawal'
+
+    Withdrawal:
+      type: object
+      required:
+        - id
+        - amount
+        - date
+      properties:
+        id:
+          type: integer
+          description: Unique identifier of the withdrawal
+          example: 101
+        amount:
+          type: number
+          format: double
+          description: Amount withdrawn
+          minimum: 0
+          example: 500.00
+        date:
+          type: string
+          format: date
+          description: Date of withdrawal
+          example: "2024-01-15"
+
+    TimeDepositsResponse:
+      type: object
+      required:
+        - content
+        - totalElements
+        - totalPages
+        - pageNumber
+        - pageSize
+      properties:
+        content:
+          type: array
+          description: List of time deposits for the current page
+          items:
+            $ref: '#/components/schemas/TimeDeposit'
+        totalElements:
+          type: integer
+          description: Total number of time deposits in the system
+          example: 150
+        totalPages:
+          type: integer
+          description: Total number of pages available
+          example: 8
+        pageNumber:
+          type: integer
+          description: Current page number (0-based)
+          example: 0
+        pageSize:
+          type: integer
+          description: Number of items per page
+          example: 20
+
+    UpdateBalancesResponse:
+      type: object
+      required:
+        - message
+        - updatedCount
+        - timestamp
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Successfully updated balances for 150 time deposits"
+        updatedCount:
+          type: integer
+          description: Number of time deposits that were updated
+          example: 150
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of when the update was performed
+          example: "2024-01-31T10:30:00Z"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "INTERNAL_SERVER_ERROR"
+        message:
+          type: string
+          description: Error message
+          example: "An unexpected error occurred while processing your request"
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of when the error occurred
+          example: "2024-01-31T10:30:00Z"
+        path:
+          type: string
+          description: API path where the error occurred
+          example: "/api/time-deposits/update-balances"
