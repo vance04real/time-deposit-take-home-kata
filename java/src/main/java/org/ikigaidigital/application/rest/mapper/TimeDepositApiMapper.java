@@ -1,37 +1,63 @@
 package org.ikigaidigital.application.rest.mapper;
 
-import org.ikigaidigital.application.rest.dto.TimeDepositResponse;
-import org.ikigaidigital.application.rest.dto.TimeDepositsPageResponse;
-import org.ikigaidigital.application.rest.dto.UpdateBalancesResponse;
-import org.ikigaidigital.application.rest.dto.WithdrawalResponse;
-import org.ikigaidigital.domain.model.Withdrawal;
+import org.ikigaidigital.api.generated.model.TimeDeposit;
+import org.ikigaidigital.api.generated.model.TimeDepositsResponse;
+import org.ikigaidigital.api.generated.model.UpdateBalancesResponse;
+import org.ikigaidigital.api.generated.model.Withdrawal;
 import org.ikigaidigital.domain.port.in.GetTimeDepositsUseCase.TimeDepositWithWithdrawals;
 import org.ikigaidigital.domain.port.in.UpdateBalancesUseCase.UpdateBalancesResult;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.springframework.data.domain.Page;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring")
 public interface TimeDepositApiMapper {
 
-    TimeDepositResponse toResponse(TimeDepositWithWithdrawals domain);
+    // Mapping to generated API models
+    @Mapping(target = "planType", expression = "java(mapPlanType(domain.planType()))")
+    TimeDeposit toGeneratedTimeDeposit(TimeDepositWithWithdrawals domain);
 
-    WithdrawalResponse toResponse(Withdrawal domain);
+    Withdrawal toGeneratedWithdrawal(org.ikigaidigital.domain.model.Withdrawal domain);
 
-    UpdateBalancesResponse toResponse(UpdateBalancesResult result);
+    @Mapping(target = "timestamp", expression = "java(mapTimestamp(result.timestamp()))")
+    UpdateBalancesResponse toGeneratedResponse(UpdateBalancesResult result);
 
-    default TimeDepositsPageResponse toPageResponse(Page<TimeDepositWithWithdrawals> page) {
+    default TimeDeposit.PlanTypeEnum mapPlanType(String planType) {
+        if (planType == null) return null;
+        return switch (planType.toLowerCase()) {
+            case "basic" -> TimeDeposit.PlanTypeEnum.BASIC;
+            case "student" -> TimeDeposit.PlanTypeEnum.STUDENT;
+            case "premium" -> TimeDeposit.PlanTypeEnum.PREMIUM;
+            default -> throw new IllegalArgumentException("Unknown plan type: " + planType);
+        };
+    }
+
+    default OffsetDateTime mapTimestamp(String timestamp) {
+        if (timestamp == null) return null;
+        try {
+            // Try parsing as ISO datetime first
+            return OffsetDateTime.parse(timestamp);
+        } catch (Exception e) {
+            // Fallback to current time if parsing fails
+            return OffsetDateTime.now(ZoneOffset.UTC);
+        }
+    }
+
+    default TimeDepositsResponse toGeneratedTimeDepositsResponse(Page<TimeDepositWithWithdrawals> page) {
         var content = page.getContent().stream()
-                .map(this::toResponse)
+                .map(this::toGeneratedTimeDeposit)
                 .collect(Collectors.toList());
 
-        return TimeDepositsPageResponse.builder()
-                .content(content)
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .pageNumber(page.getNumber())
-                .pageSize(page.getSize())
-                .build();
+        var response = new TimeDepositsResponse();
+        response.setContent(content);
+        response.setTotalElements((int) page.getTotalElements());
+        response.setTotalPages(page.getTotalPages());
+        response.setPageNumber(page.getNumber());
+        response.setPageSize(page.getSize());
+        return response;
     }
 }
